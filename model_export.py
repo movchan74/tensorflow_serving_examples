@@ -1,8 +1,7 @@
+import os
 import tensorflow as tf
 from keras.applications.resnet50 import ResNet50
-from keras.preprocessing import image
 from keras.applications.resnet50 import preprocess_input, decode_predictions
-from tensorflow.contrib.session_bundle import exporter
 import keras.backend as K
 
 K.set_learning_phase(0)
@@ -12,14 +11,33 @@ model = ResNet50(weights='imagenet')
 
 sess = K.get_session()
 
-export_path = './model'
+export_path_base = './model'
 export_version = 1
 
-saver = tf.train.Saver(sharded=True)
-model_exporter = exporter.Exporter(saver)
+export_path = os.path.join(
+  tf.compat.as_bytes(export_path_base),
+  tf.compat.as_bytes(str(export_version)))
+print('Exporting trained model to', export_path)
+builder = tf.saved_model.builder.SavedModelBuilder(export_path)
 
-model_exporter.init(sess.graph.as_graph_def(), named_graph_signatures={
-  'inputs': exporter.generic_signature({'images': model.input}),
-  'outputs': exporter.generic_signature({'scores': model.output})})
+model_input = tf.saved_model.utils.build_tensor_info(model.input)
+model_output = tf.saved_model.utils.build_tensor_info(model.output)
 
-model_exporter.export(export_path, tf.constant(export_version), sess)
+prediction_signature = (
+  tf.saved_model.signature_def_utils.build_signature_def(
+      inputs={'images': model_input},
+      outputs={'scores': model_output},
+      method_name=tf.saved_model.signature_constants.PREDICT_METHOD_NAME))
+
+legacy_init_op = tf.group(tf.tables_initializer(), name='legacy_init_op')
+builder.add_meta_graph_and_variables(
+  sess, [tf.saved_model.tag_constants.SERVING],
+  signature_def_map={
+      'predict':
+          prediction_signature,
+  },
+  legacy_init_op=legacy_init_op)
+
+builder.save()
+
+print('Done exporting!')

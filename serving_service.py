@@ -28,6 +28,7 @@ def get_prediction(img):
     stub = prediction_service_pb2.beta_create_PredictionService_stub(channel)
     request = predict_pb2.PredictRequest()
     request.model_spec.name = 'resnet50'
+    request.model_spec.signature_name = 'predict'
 
     request.inputs['images'].CopyFrom(
         tf.contrib.util.make_tensor_proto(image, shape=image.shape))
@@ -46,6 +47,6 @@ def predict():
         return response
     else:
         return jsonify({'status': 'error'})
-    
+
 if __name__ == "__main__":
     application.run()
